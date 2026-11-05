@@ -14,6 +14,20 @@ if [ -z "$checkout" ] || [ ! -f "$daemon/CMakeLists.txt" ]; then
   exit 2
 fi
 
+# Local patches on top of the daemon (see patches/). Idempotent: skipped when already applied.
+patches="$(dirname "$(readlink -f "$0")")/../patches"
+for patch in "$patches"/*.patch; do
+  [ -f "$patch" ] || continue
+  if git -C "$checkout" apply --check "$patch" 2>/dev/null; then
+    git -C "$checkout" apply "$patch"
+    echo "patch applied: $(basename "$patch")"
+  elif git -C "$checkout" apply --reverse --check "$patch" 2>/dev/null; then
+    echo "patch already applied: $(basename "$patch")"
+  else
+    echo "patch $(basename "$patch") does not apply to this checkout, skipped" >&2
+  fi
+done
+
 needed=(cmake ninja qt6-connectivity qt6-tools qt6-declarative pkgconf libpulse)
 missing=()
 for p in "${needed[@]}"; do

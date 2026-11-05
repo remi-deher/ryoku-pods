@@ -20,7 +20,7 @@ git clone https://github.com/thisisgm/omarchy-pods ~/src/omarchy-pods
 ~/.local/share/ryoku/plugins/ryoku-pods/bin/ryopods-setup ~/src/omarchy-pods
 ```
 
-`ryopods-setup` checks the Qt/CMake packages (installs any missing one through `pkexec`), builds, installs to `~/.local`, and enables `librepods.service`.
+`ryopods-setup` first applies the patches in `patches/` to the checkout with `git apply` (skipped when already applied). `0001-conversation-awareness-volume.patch` makes the conversation-awareness volume behave like iOS: the volume stays down while people talk, comes back 3 s after the last voice (a jump, then an exponential rise), and no longer drifts or overrides a manual change. The patch is a change to the GPLv3 daemon source and carries the same licence. Then it checks the Qt/CMake packages (installs any missing one through `pkexec`), builds, installs to `~/.local`, and enables `librepods.service`.
 
 ## Install / remove
 
