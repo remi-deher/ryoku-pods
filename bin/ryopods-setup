@@ -1,32 +1,20 @@
 #!/bin/bash
 # Builds and enables the librepods daemon that this plugin reads from.
-# Usage: ryopods-setup /path/to/omarchy-pods-checkout
-# The daemon source is NOT shipped in this plugin: clone it yourself first
-#   git clone https://github.com/thisisgm/omarchy-pods
+# Usage: ryopods-setup [/path/to/daemon]
+# With no argument it builds the daemon shipped in this plugin (daemon/, a modified copy of
+# librepods, GPLv3, see daemon/UPSTREAM.md). The build happens in the cache, not in the plugin.
 # Missing build packages are installed through pkexec (declared in the manifest).
 
 set -euo pipefail
 
-checkout=${1:-}
-daemon="$checkout/daemon"
-if [ -z "$checkout" ] || [ ! -f "$daemon/CMakeLists.txt" ]; then
-  echo "usage: ryopods-setup /path/to/omarchy-pods   (the folder that contains daemon/)" >&2
+plugin="$(dirname "$(readlink -f "$0")")/.."
+daemon="$(readlink -f "${1:-$plugin/daemon}")"
+if [ ! -f "$daemon/CMakeLists.txt" ]; then
+  echo "usage: ryopods-setup [/path/to/daemon]   (the folder that contains CMakeLists.txt)" >&2
   exit 2
 fi
-
-# Local patches on top of the daemon (see patches/). Idempotent: skipped when already applied.
-patches="$(dirname "$(readlink -f "$0")")/../patches"
-for patch in "$patches"/*.patch; do
-  [ -f "$patch" ] || continue
-  if git -C "$checkout" apply --check "$patch" 2>/dev/null; then
-    git -C "$checkout" apply "$patch"
-    echo "patch applied: $(basename "$patch")"
-  elif git -C "$checkout" apply --reverse --check "$patch" 2>/dev/null; then
-    echo "patch already applied: $(basename "$patch")"
-  else
-    echo "patch $(basename "$patch") does not apply to this checkout, skipped" >&2
-  fi
-done
+build="${XDG_CACHE_HOME:-$HOME/.cache}/ryoku/plugins/ryoku-pods/build"
+share="$HOME/.local/share/librepods"
 
 needed=(cmake ninja qt6-connectivity qt6-tools qt6-declarative pkgconf libpulse)
 missing=()
@@ -39,9 +27,12 @@ if [ "${#missing[@]}" -gt 0 ]; then
   pkexec pacman -S --needed --noconfirm cmake ninja qt6-connectivity qt6-tools qt6-declarative pkgconf libpulse
 fi
 
-cmake -S "$daemon" -B "$daemon/build" -G Ninja -DBUILD_TESTING=OFF
-cmake --build "$daemon/build"
-cmake --install "$daemon/build" --prefix "$HOME/.local"
+cmake -S "$daemon" -B "$build" -G Ninja -DBUILD_TESTING=OFF
+cmake --build "$build"
+cmake --install "$build" --prefix "$HOME/.local"
+# Kept outside the build folder so ryopods-remove works after the cache is cleaned.
+mkdir -p "$share"
+cp "$build/install_manifest.txt" "$share/install_manifest.txt"
 
 systemctl --user daemon-reload
 systemctl --user enable librepods.service

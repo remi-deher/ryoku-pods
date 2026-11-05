@@ -1,16 +1,18 @@
 #!/bin/bash
 # Stops the librepods daemon and removes what ryopods-setup installed.
-# Usage: ryopods-remove /path/to/omarchy-pods-checkout   (needs its daemon/build)
+# Usage: ryopods-remove
 set -euo pipefail
 
-manifest="${1:-}/daemon/build/install_manifest.txt"
+manifest="$HOME/.local/share/librepods/install_manifest.txt"
 systemctl --user disable --now librepods.service || true
 if [ -f "$manifest" ]; then
   xargs rm -f < "$manifest"
+  rm -rf "$HOME/.local/share/librepods"
 else
-  echo "no install_manifest.txt at $manifest: daemon files left in ~/.local" >&2
+  echo "no install manifest at $manifest: daemon files left in ~/.local" >&2
 fi
 systemctl --user daemon-reload
-# Pairing secrets (magicAccIRK, magicAccEncKey) and the published status line.
-rm -rf "$HOME/.config/AirPodsTrayApp" "$HOME/.local/state/librepods"
+# Pairing secrets (magicAccIRK, magicAccEncKey), the published status line and the build cache.
+rm -rf "$HOME/.config/AirPodsTrayApp" "$HOME/.local/state/librepods" \
+  "${XDG_CACHE_HOME:-$HOME/.cache}/ryoku/plugins/ryoku-pods/build"
 echo "librepods removed."

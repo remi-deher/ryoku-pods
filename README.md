@@ -9,18 +9,17 @@ Shows battery per pod and case, listening mode, adaptive noise level, Conversati
 - **Reads** `$XDG_STATE_HOME/librepods/status.json` (watched, no polling).
 - **Runs** `librepods-ctl <verb>` (argv array, when you change a setting), `bin/ryopods-connect` (the Connection switch: finds the paired Apple device and runs `bluetoothctl connect` or `disconnect`) and `notify-send` (argv array, one desktop notification when a battery gets low, if enabled). Both declared in `dependencies.commands`.
 - **Writes** nothing itself. No network. One privileged action, only when you run `bin/ryopods-setup` by hand and build packages are missing: `pkexec pacman -S --needed --noconfirm cmake ninja qt6-connectivity qt6-tools qt6-declarative pkgconf libpulse` (polkit prompt).
-- `bin/ryopods-setup` and `bin/ryopods-remove` are optional helpers you run by hand. They build/install or remove the daemon in `~/.local` and `~/.config/systemd`-managed user units, and delete `~/.config/AirPodsTrayApp` and `~/.local/state/librepods` on removal (the validator flags these as outside-write warnings; that is intended).
+- `bin/ryopods-setup` and `bin/ryopods-remove` are optional helpers you run by hand. They build/install or remove the daemon in `~/.local` (build in the cache) and `~/.config/systemd`-managed user units, and delete `~/.config/AirPodsTrayApp` and `~/.local/state/librepods` on removal (the validator flags these as outside-write warnings; that is intended).
 
 ## The daemon is required
 
-The plugin cannot talk to Bluetooth. It needs the patched librepods daemon from omarchy-pods (upstream librepods lacks the status file and the `ca:`/`onebud:`/`adaptive:` verbs). It is not bundled here (GPLv3, C++ source, and a plugin may not download or ship code to run):
+The plugin cannot talk to Bluetooth. It needs the patched librepods daemon, shipped in `daemon/` (upstream librepods lacks the status file and the `ca:`/`onebud:`/`adaptive:` verbs). It is a modified copy of [librepods](https://github.com/kavishdevar/librepods) by Kavish Devar through GM's fork [omarchy-pods](https://github.com/thisisgm/omarchy-pods), under the **GPLv3** (`daemon/LICENSE`, credits in `daemon/UPSTREAM.md`). It is C++ source that you build yourself, nothing is downloaded or run for you:
 
 ```bash
-git clone https://github.com/thisisgm/omarchy-pods ~/src/omarchy-pods
-~/.local/share/ryoku/plugins/ryoku-pods/bin/ryopods-setup ~/src/omarchy-pods
+~/.local/share/ryoku/plugins/ryoku-pods/bin/ryopods-setup
 ```
 
-`ryopods-setup` first applies the patches in `patches/` to the checkout with `git apply` (skipped when already applied). `0001-conversation-awareness-volume.patch` makes the conversation-awareness volume behave like iOS: the volume stays down while people talk, comes back 3 s after the last voice (a jump, then an exponential rise), and no longer drifts or overrides a manual change. The patch is a change to the GPLv3 daemon source and carries the same licence. Then it checks the Qt/CMake packages (installs any missing one through `pkexec`), builds, installs to `~/.local`, and enables `librepods.service`.
+`ryopods-setup` checks the Qt/CMake packages (installs any missing one through `pkexec`), builds in `~/.cache/ryoku/plugins/ryoku-pods/build`, installs to `~/.local`, keeps the install list in `~/.local/share/librepods/` and enables `librepods.service`. Pass another daemon folder as an argument to build that one instead. `bin/ryopods-remove` undoes it.
 
 ## Install / remove
 
@@ -59,6 +58,7 @@ Validated with `ryoku plugin validate` (0 blocking) and installed. **Not tested 
 
 ## Credits
 
-- Original plugin, panel design, `Model.js` and the patched daemon: **GM** ([thisisgm/omarchy-pods](https://github.com/thisisgm/omarchy-pods), MIT).
+- Original plugin, panel design, `Model.js` and the daemon fork: **GM** ([thisisgm/omarchy-pods](https://github.com/thisisgm/omarchy-pods), MIT).
+- AirPods protocol and the daemon it is built on (`daemon/`): **Kavish Devar** ([kavishdevar/librepods](https://github.com/kavishdevar/librepods), GPLv3). The QR code library in `daemon/thirdparty` is by Project Nayuki (MIT).
 - AirPods protocol (AAP over L2CAP, BLE advertisements): **Kavish Devar**, [librepods](https://github.com/kavishdevar/librepods) (GPLv3; the daemon is a modified copy of it).
 - Ryoku port: Remi. See `LICENSE`.
