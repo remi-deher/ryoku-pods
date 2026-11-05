@@ -21,6 +21,7 @@
     "bin/ryopods-setup",
     "bin/ryopods-remove",
     "content/AirPodsIcon.qml",
+    "content/Segmented.qml",
     "service/Model.js",
     "tests/model.test.js"
   ],
@@ -39,7 +40,8 @@
   },
   "dependencies": {
     "commands": [
-      "librepods-ctl"
+      "librepods-ctl",
+      "notify-send"
     ],
     "packages": [
       "cmake",
@@ -58,6 +60,72 @@
         "type": "toggle",
         "label": "Hide the icon when no AirPods are connected",
         "group": "AirPods",
+        "default": true
+      },
+      {
+        "key": "showPercentOnGlyph",
+        "type": "toggle",
+        "label": "Show the battery percentage next to the icon",
+        "group": "AirPods",
+        "default": true
+      },
+      {
+        "key": "batteryDisplay",
+        "type": "choice",
+        "label": "Battery shown on the bar",
+        "group": "AirPods",
+        "default": "lowest",
+        "options": [
+          {
+            "value": "lowest",
+            "label": "Lowest pod"
+          },
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          },
+          {
+            "value": "case",
+            "label": "Case"
+          }
+        ]
+      },
+      {
+        "key": "rightClickAction",
+        "type": "choice",
+        "label": "Right click on the icon",
+        "group": "AirPods",
+        "default": "cycle",
+        "options": [
+          {
+            "value": "cycle",
+            "label": "Cycle listening mode"
+          },
+          {
+            "value": "none",
+            "label": "Nothing"
+          }
+        ]
+      },
+      {
+        "key": "lowBatteryThreshold",
+        "type": "slider",
+        "label": "Low battery threshold (%)",
+        "group": "Battery",
+        "default": 20,
+        "min": 5,
+        "max": 50,
+        "step": 5
+      },
+      {
+        "key": "notifyLowBattery",
+        "type": "toggle",
+        "label": "Notify when a battery gets low",
+        "group": "Battery",
         "default": true
       }
     ]

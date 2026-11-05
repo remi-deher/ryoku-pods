@@ -18,12 +18,13 @@ Item {
 
     readonly property var pods: pluginApi ? pluginApi.mainInstance : null
     readonly property var mdl: pods ? pods.model : null
-    readonly property int lowBatteryPercent: 20
+    readonly property int lowBatteryPercent: pods ? pods.lowBatteryPercent : 20
     readonly property int adaptiveStepPercent: 5
+    readonly property int adaptiveSendMs: 150
 
     readonly property var modes: pods ? pods.availableModes() : []
     readonly property bool adaptiveVisible: pods && pods.hasAirPods && pods.supportsAdaptive && pods.noiseMode === mdl.NOISE_ADAPTIVE
-    readonly property string variant: pods && pods.isHeadset ? "max" : pods && pods.isProSeries ? "pro" : "buds"
+    readonly property string variant: pods ? pods.iconVariant : "buds"
     readonly property string subtitle: !pods ? ""
         : pods.hasAirPods ? root.tr("Connected")
         : pods.schemaUnsupported ? root.tr("Unsupported status schema")
@@ -196,16 +197,36 @@ Item {
                         radius: width / 2
                         color: Theme.bright
                     }
+                    property int lastSent: -1
+                    function snapped(fraction) {
+                        var step = root.adaptiveStepPercent;
+                        return Math.round(fraction * 100 / step) * step;
+                    }
+                    function send(fraction) {
+                        var level = snapped(fraction);
+                        if (level === lastSent) return;
+                        lastSent = level;
+                        root.pods.setAdaptiveNoiseLevel(level);
+                    }
+                    // While dragging, the level is sent at most every adaptiveSendMs, so the
+                    // sound follows the thumb without flooding librepods-ctl.
+                    Timer {
+                        id: dragSend
+                        interval: root.adaptiveSendMs
+                        repeat: true
+                        running: slider.dragging
+                        onTriggered: slider.send(slider.dragFraction)
+                    }
                     MouseArea {
                         anchors.fill: parent
                         function frac(mx) { return Math.max(0, Math.min(1, mx / width)); }
-                        onPressed: function (m) { slider.dragging = true; slider.dragFraction = frac(m.x); }
+                        onPressed: function (m) { slider.lastSent = -1; slider.dragging = true; slider.dragFraction = frac(m.x); }
                         onPositionChanged: function (m) { if (slider.dragging) slider.dragFraction = frac(m.x); }
                         onReleased: function (m) {
                             slider.dragging = false;
-                            var step = root.adaptiveStepPercent;
-                            root.pods.setAdaptiveNoiseLevel(Math.round(frac(m.x) * 100 / step) * step);
+                            slider.send(frac(m.x));
                         }
+                        onCanceled: slider.dragging = false
                     }
                 }
             }
@@ -233,35 +254,27 @@ Item {
         }
 
         // Ear detection
-        Rectangle {
+        Column {
             visible: root.pods && root.pods.hasAirPods
             width: parent.width
-            height: 28 * root.s
-            radius: Theme.radius
-            color: earArea.containsMouse ? Theme.tileBg : "transparent"
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                x: 10 * root.s
-                text: root.tr("Ear detection")
-                color: Theme.bright
-                font.family: Theme.font
-                font.pixelSize: 13 * root.s
+            spacing: 6 * root.s
+
+            Label { text: root.tr("EAR DETECTION") }
+
+            Segmented {
+                width: parent.width
+                s: root.s
+                options: root.mdl ? [root.mdl.earDetectionShort(0), root.mdl.earDetectionShort(1), root.mdl.earDetectionShort(2)] : []
+                current: root.pods ? root.pods.earDetectionBehavior : -1
+                onPicked: function (i) { root.pods.setEarDetectionBehavior(i) }
             }
             Text {
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.right: parent.right
-                anchors.rightMargin: 10 * root.s
-                text: root.pods ? root.mdl.earDetectionName(root.pods.earDetectionBehavior) : ""
+                width: parent.width
+                text: root.pods && root.mdl ? root.mdl.earDetectionName(root.pods.earDetectionBehavior) : ""
                 color: Theme.dim
                 font.family: Theme.font
-                font.pixelSize: 12 * root.s
-            }
-            MouseArea {
-                id: earArea
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.pods.cycleEarDetection()
+                font.pixelSize: 11 * root.s
+                elide: Text.ElideRight
             }
         }
 

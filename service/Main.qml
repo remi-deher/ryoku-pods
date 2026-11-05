@@ -73,6 +73,27 @@ Item {
 
   readonly property var model: Model
   readonly property bool hideWhenDisconnected: setting("hideWhenDisconnected", true) === true
+  readonly property bool showPercentOnGlyph: setting("showPercentOnGlyph", true) === true
+  readonly property bool notifyLowBattery: setting("notifyLowBattery", true) === true
+  readonly property string batteryDisplay: String(setting("batteryDisplay", "lowest"))
+  readonly property string rightClickAction: String(setting("rightClickAction", "cycle"))
+  readonly property int lowBatteryPercent: Math.max(1, Math.min(100, Math.round(Number(setting("lowBatteryThreshold", 20)) || 20)))
+
+  // Level the bar glyph shows, per the batteryDisplay setting.
+  readonly property int displayedLevel: Model.displayLevel(batteryDisplay, isHeadset, leftPod, rightPod, caseBattery, headsetBattery)
+  readonly property bool displayedLow: {
+    var charging = isHeadset ? headsetBattery.charging
+      : batteryDisplay === "left" ? leftPod.charging
+      : batteryDisplay === "right" ? rightPod.charging
+      : batteryDisplay === "case" ? caseBattery.charging
+      : (leftPod.level >= 0 && (rightPod.level < 0 || leftPod.level <= rightPod.level) ? leftPod.charging : rightPod.charging)
+    return Model.isLow(displayedLevel, charging, lowBatteryPercent)
+  }
+  readonly property string iconVariant: isHeadset ? "max" : isProSeries ? "pro" : "buds"
+  readonly property var tooltipLines: Model.tooltipLines({
+    modelName: modelName, deviceName: deviceName, isHeadset: isHeadset, noiseMode: noiseMode,
+    left: leftPod, right: rightPod, caseBattery: caseBattery, headset: headsetBattery
+  })
 
   Component.onCompleted: Model.setLang(Qt.locale().name)
 
@@ -121,11 +142,48 @@ Item {
     headsetBattery = status.headset
     lidState = status.lidState
 
+    _checkLowBattery()
+
     noiseMode = _settle("noiseMode", status.noiseMode)
     adaptiveNoiseLevel = _settle("adaptiveNoiseLevel", status.adaptiveNoiseLevel)
     oneBudANC = _settle("oneBudANC", status.oneBudANC)
     conversationalAwareness = _settle("conversationalAwareness", status.conversationalAwareness)
     earDetectionBehavior = _settle("earDetectionBehavior", status.earDetectionBehavior)
+  }
+
+  // One armed flag per battery, so a pod and the case each notify once per discharge.
+  property var _lowArmed: ({ left: true, right: true, "case": true, headset: true })
+  property var _notifyQueue: []
+
+  function _checkLowBattery() {
+    var batteries = isHeadset
+      ? [{ key: "headset", name: Model.t("Headphones"), b: headsetBattery }]
+      : [{ key: "left", name: Model.t("Left"), b: leftPod },
+         { key: "right", name: Model.t("Right"), b: rightPod },
+         { key: "case", name: Model.t("Case"), b: caseBattery }]
+    var armed = Object.assign({}, _lowArmed)
+    for (var i = 0; i < batteries.length; i++) {
+      var it = batteries[i]
+      var step = Model.lowBatteryStep(armed[it.key], it.b.level, it.b.charging, lowBatteryPercent)
+      armed[it.key] = step.armed
+      if (step.notify && notifyLowBattery)
+        _notify(Model.t("Low battery"), Model.lowBatteryMessage((modelName || deviceName || "AirPods") + " · " + it.name, it.b.level))
+    }
+    _lowArmed = armed
+  }
+
+  // argv array, plain text only (R9). Queued because one Process runs one command at a time.
+  function _notify(title, body) {
+    _notifyQueue = _notifyQueue.concat([[title, body]])
+    if (!notifyProcess.running) _nextNotify()
+  }
+
+  function _nextNotify() {
+    if (_notifyQueue.length === 0) return
+    var next = _notifyQueue[0]
+    _notifyQueue = _notifyQueue.slice(1)
+    notifyProcess.command = ["notify-send", "-a", "Ryoku AirPods", "-i", "battery-caution", "--", next[0], next[1]]
+    notifyProcess.running = true
   }
 
   function _settle(field, reported) {
@@ -145,18 +203,14 @@ Item {
 
   function _send(verb, field, optimistic) {
     if (verb === "") return
-    if (commandProcess.running) {
-      _queued = { verb: verb, field: field, optimistic: optimistic }
-      _pendingField = field
-      _pendingValue = optimistic
-      root[field] = optimistic
-      settleTimer.restart()
-      return
-    }
     _pendingField = field
     _pendingValue = optimistic
     root[field] = optimistic
     settleTimer.restart()
+    if (commandProcess.running) {
+      _queued = { verb: verb, field: field, optimistic: optimistic }
+      return
+    }
     commandProcess.command = [ctlPath, verb]
     commandProcess.running = true
   }
@@ -226,6 +280,13 @@ Item {
     onFileChanged: reload()
     onLoaded: root.applyLine(text())
     onLoadFailed: root.stateGone()
+  }
+
+  Process {
+    id: notifyProcess
+    running: false
+    command: []
+    onExited: root._nextNotify()
   }
 
   Process {

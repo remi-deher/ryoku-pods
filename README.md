@@ -7,7 +7,7 @@ Shows battery per pod and case, listening mode, adaptive noise level, Conversati
 ## What runs, reads, writes
 
 - **Reads** `$XDG_STATE_HOME/librepods/status.json` (watched, no polling).
-- **Runs** `librepods-ctl <verb>` (argv array, only when you change a setting). Declared in `dependencies.commands`.
+- **Runs** `librepods-ctl <verb>` (argv array, only when you change a setting) and `notify-send` (argv array, one desktop notification when a battery gets low, if enabled). Both declared in `dependencies.commands`.
 - **Writes** nothing itself. No network. One privileged action, only when you run `bin/ryopods-setup` by hand and build packages are missing: `pkexec pacman -S --needed --noconfirm cmake ninja qt6-connectivity qt6-tools qt6-declarative pkgconf libpulse` (polkit prompt).
 - `bin/ryopods-setup` and `bin/ryopods-remove` are optional helpers you run by hand. They build/install or remove the daemon in `~/.local` and `~/.config/systemd`-managed user units, and delete `~/.config/AirPodsTrayApp` and `~/.local/state/librepods` on removal (the validator flags these as outside-write warnings; that is intended).
 
@@ -34,6 +34,13 @@ ryoku plugin remove ryoku-pods
 | key | type | default | description |
 | --- | --- | --- | --- |
 | hideWhenDisconnected | toggle | true | Hide the glyph when no AirPods are connected |
+| showPercentOnGlyph | toggle | true | Show the percentage next to the glyph (when the bar gives room for text) |
+| batteryDisplay | choice | lowest | Which battery the bar shows: lowest pod, left, right or case |
+| rightClickAction | choice | cycle | Right click on the glyph: cycle the listening mode, or nothing |
+| lowBatteryThreshold | slider | 20 | At or under this level (and not charging) the glyph turns to the warning colour |
+| notifyLowBattery | toggle | true | One notification per battery when it gets low; re-armed once it charges or climbs 5 points over the threshold |
+
+Hovering the glyph shows a tooltip with each battery and the listening mode.
 
 ## Differences from the Omarchy version
 

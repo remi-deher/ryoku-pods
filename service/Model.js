@@ -35,7 +35,14 @@ var FR = {
   "Start the librepods daemon (systemctl --user start librepods) to see battery and listening controls.": "Lancez le démon librepods (systemctl --user start librepods) pour voir la batterie et les réglages d'écoute.",
   "Case not heard": "Boîtier non détecté",
   "The librepods status file is empty": "Le fichier d'état librepods est vide",
-  "Could not read the librepods status file": "Impossible de lire le fichier d'état librepods"
+  "Could not read the librepods status file": "Impossible de lire le fichier d'état librepods",
+  "One out": "Un retiré",
+  "Both out": "Deux retirés",
+  "Never": "Jamais",
+  "EAR DETECTION": "DÉTECTION D'OREILLE",
+  "Low battery": "Batterie faible",
+  "%1 is at %2%": "%1 : %2 %",
+  "Listening mode": "Mode d'écoute"
 }
 function setLang(name) { LANG = String(name || "").toLowerCase().indexOf("fr") === 0 ? "fr" : "en" }
 function t(s) { return LANG === "fr" && FR[s] !== undefined ? FR[s] : s }
@@ -266,4 +273,58 @@ function podMeta(pod) {
 function elideError(text) {
   var value = String(text || "").replace(/\s+/g, " ").trim()
   return value.length > MAX_ERROR_CHARS ? value.substring(0, ELIDED_ERROR_CHARS) + "…" : value
+}
+
+// Short labels for the segmented ear-detection control.
+function earDetectionShort(behavior) {
+  if (behavior === EAR_PAUSE_ONE_OUT) return t("One out")
+  if (behavior === EAR_PAUSE_BOTH_OUT) return t("Both out")
+  if (behavior === EAR_DISABLED) return t("Never")
+  return t("Unknown")
+}
+
+// Level shown next to the glyph. display: "lowest" | "left" | "right" | "case".
+// A headset has one battery, so every choice collapses to it. Returns LEVEL_UNKNOWN when nothing is known.
+function displayLevel(display, isHeadset, left, right, caseBattery, headset) {
+  if (isHeadset) return headset.level
+  if (display === "left") return left.level
+  if (display === "right") return right.level
+  if (display === "case") return caseBattery.level
+  var known = [left.level, right.level].filter(function (l) { return l >= 0 })
+  return known.length ? Math.min.apply(null, known) : LEVEL_UNKNOWN
+}
+
+// Low means known, at or under the threshold, and not on charge.
+function isLow(level, charging, threshold) {
+  return level >= 0 && level <= threshold && !charging
+}
+
+// Hysteresis: once notified, a battery must climb this far over the threshold (or charge) to re-arm.
+var LOW_REARM_MARGIN = 5
+
+// Decides whether a battery notification fires. `armed` is the previous state for this battery
+// (true = may notify). Returns { notify, armed }.
+function lowBatteryStep(armed, level, charging, threshold) {
+  if (level < 0) return { notify: false, armed: armed }
+  if (charging || level > threshold + LOW_REARM_MARGIN) return { notify: false, armed: true }
+  if (armed && isLow(level, charging, threshold)) return { notify: true, armed: false }
+  return { notify: false, armed: armed }
+}
+
+// Plain-text tooltip lines; no markup so a model name cannot inject any.
+function tooltipLines(s) {
+  var lines = [s.modelName || s.deviceName || "AirPods"]
+  if (s.isHeadset) {
+    lines.push(t("Headphones") + "  " + levelText(s.headset.level))
+  } else {
+    lines.push(t("Left") + "  " + levelText(s.left.level) + (s.left.charging ? " ⚡" : ""))
+    lines.push(t("Right") + "  " + levelText(s.right.level) + (s.right.charging ? " ⚡" : ""))
+    lines.push(t("Case") + "  " + levelText(s.caseBattery.level) + (s.caseBattery.charging ? " ⚡" : ""))
+  }
+  if (s.noiseMode >= 0) lines.push(t("Listening mode") + "  " + noiseModeName(s.noiseMode))
+  return lines
+}
+
+function lowBatteryMessage(name, level) {
+  return t("%1 is at %2%").replace("%1", name).replace("%2", String(level))
 }

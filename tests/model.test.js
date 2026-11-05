@@ -3,7 +3,7 @@
 
 const source = Deno.readTextFileSync(new URL("../service/Model.js", import.meta.url))
 const Model = new Function(
-  source + "; return { parseStatus, podFrom, defaultPod, noiseModeVerb, earDetectionVerb, levelFraction, levelText, podMeta, elideError, availableModes, NOISE_OFF, NOISE_ANC, NOISE_TRANSPARENCY, NOISE_ADAPTIVE, LEVEL_UNKNOWN, NOISE_UNKNOWN, EAR_PAUSE_ONE_OUT, LID_UNKNOWN, MAX_ERROR_CHARS }"
+  source + "; return { parseStatus, podFrom, defaultPod, noiseModeVerb, earDetectionVerb, levelFraction, levelText, podMeta, elideError, availableModes, displayLevel, isLow, lowBatteryStep, tooltipLines, earDetectionShort, defaultStatus, NOISE_OFF, NOISE_ANC, NOISE_TRANSPARENCY, NOISE_ADAPTIVE, LEVEL_UNKNOWN, NOISE_UNKNOWN, EAR_PAUSE_ONE_OUT, LID_UNKNOWN, MAX_ERROR_CHARS }"
 )()
 
 let failures = 0
@@ -137,7 +137,40 @@ check("a Pro 3 loses Off and keeps Adaptive", modesFor(good),
 check("a Max 2 gets all four", modesFor(max2),
   [Model.NOISE_OFF, Model.NOISE_TRANSPARENCY, Model.NOISE_ADAPTIVE, Model.NOISE_ANC])
 
+// Glyph level choice
+const L = { level: 30, charging: false }, R = { level: 80, charging: false }, C = { level: 55, charging: false }, H = { level: 12, charging: false }
+check("display lowest", Model.displayLevel("lowest", false, L, R, C, H), 30)
+check("display right", Model.displayLevel("right", false, L, R, C, H), 80)
+check("display case", Model.displayLevel("case", false, L, R, C, H), 55)
+check("display headset ignores choice", Model.displayLevel("left", true, L, R, C, H), 12)
+check("display lowest skips unknown pod", Model.displayLevel("lowest", false, { level: -1 }, R, C, H), 80)
+check("display lowest, none known", Model.displayLevel("lowest", false, { level: -1 }, { level: -1 }, C, H), -1)
+
+// Low battery
+check("low at threshold", Model.isLow(20, false, 20), true)
+check("not low while charging", Model.isLow(5, true, 20), false)
+check("unknown is never low", Model.isLow(-1, false, 20), false)
+
+// Notification fires once, re-arms only after charging or a clear climb
+let st = Model.lowBatteryStep(true, 18, false, 20)
+check("first low notifies", st, { notify: true, armed: false })
+st = Model.lowBatteryStep(st.armed, 17, false, 20)
+check("second low is silent", st, { notify: false, armed: false })
+st = Model.lowBatteryStep(st.armed, 22, false, 20)
+check("inside hysteresis stays disarmed", st, { notify: false, armed: false })
+st = Model.lowBatteryStep(st.armed, 26, false, 20)
+check("above margin re-arms", st, { notify: false, armed: true })
+check("charging re-arms", Model.lowBatteryStep(false, 10, true, 20), { notify: false, armed: true })
+check("unknown level keeps state", Model.lowBatteryStep(false, -1, false, 20), { notify: false, armed: false })
+
+// Tooltip
+const ts = Model.defaultStatus()
+ts.modelName = "AirPods Pro 3"; ts.left = { level: 79, charging: false, inEar: false }; ts.right = { level: 100, charging: true, inEar: false }; ts.noiseMode = 1
+check("tooltip lines", Model.tooltipLines(ts), ["AirPods Pro 3", "Left  79%", "Right  100% ⚡", "Case  --", "Listening mode  Noise Cancellation"])
+check("ear short label", Model.earDetectionShort(2), "Never")
+
 if (failures > 0) {
+
   console.log(failures + " failed")
   Deno.exit(1)
 }
