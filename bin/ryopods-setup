@@ -1,0 +1,37 @@
+#!/bin/bash
+# Builds and enables the librepods daemon that this plugin reads from.
+# Usage: ryopods-setup /path/to/omarchy-pods-checkout
+# The daemon source is NOT shipped in this plugin: clone it yourself first
+#   git clone https://github.com/thisisgm/omarchy-pods
+# Missing build packages are installed through pkexec (declared in the manifest).
+
+set -euo pipefail
+
+checkout=${1:-}
+daemon="$checkout/daemon"
+if [ -z "$checkout" ] || [ ! -f "$daemon/CMakeLists.txt" ]; then
+  echo "usage: ryopods-setup /path/to/omarchy-pods   (the folder that contains daemon/)" >&2
+  exit 2
+fi
+
+needed=(cmake ninja qt6-connectivity qt6-tools qt6-declarative pkgconf libpulse)
+missing=()
+for p in "${needed[@]}"; do
+  pacman -Q "$p" >/dev/null 2>&1 || missing+=("$p")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  # Explicit user action only: the script is run by hand, and pkexec shows its own prompt.
+  echo "Installing missing packages (polkit prompt): ${missing[*]}"
+  pkexec pacman -S --needed --noconfirm cmake ninja qt6-connectivity qt6-tools qt6-declarative pkgconf libpulse
+fi
+
+cmake -S "$daemon" -B "$daemon/build" -G Ninja -DBUILD_TESTING=OFF
+cmake --build "$daemon/build"
+cmake --install "$daemon/build" --prefix "$HOME/.local"
+
+systemctl --user daemon-reload
+systemctl --user enable librepods.service
+# restart rather than --now, so an already-running daemon picks up the new binary.
+systemctl --user restart librepods.service
+
+echo "librepods is running; the bar glyph appears once AirPods are connected."

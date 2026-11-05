@@ -1,0 +1,403 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Layouts
+import Ryoku.PluginKit.Singletons
+
+// The bar panel: battery per pod and case, listening mode, adaptive level,
+// Conversation Awareness, One-Bud ANC and ear detection. Every row is drawn
+// from the capability keys the daemon publishes, so a model without a feature
+// simply gets no row for it.
+Item {
+    id: root
+
+    property var pluginApi
+    property string density: "full"
+    property real s: 1
+    property real widthBudget: 340
+    property bool active: false
+
+    readonly property var pods: pluginApi ? pluginApi.mainInstance : null
+    readonly property var mdl: pods ? pods.model : null
+    readonly property int lowBatteryPercent: 20
+    readonly property int adaptiveStepPercent: 5
+
+    readonly property var modes: pods ? pods.availableModes() : []
+    readonly property bool adaptiveVisible: pods && pods.hasAirPods && pods.supportsAdaptive && pods.noiseMode === mdl.NOISE_ADAPTIVE
+    readonly property string variant: pods && pods.isHeadset ? "max" : pods && pods.isProSeries ? "pro" : "buds"
+    readonly property string subtitle: !pods ? ""
+        : pods.hasAirPods ? root.tr("Connected")
+        : pods.schemaUnsupported ? root.tr("Unsupported status schema")
+        : pods.daemonReachable ? root.tr("Not connected")
+        : root.tr("librepods is not running")
+
+    function tr(s) { return mdl ? mdl.t(s) : s }
+
+    onActiveChanged: if (active && pods) pods.refresh()
+
+    implicitWidth: widthBudget
+    implicitHeight: col.implicitHeight + 24 * s
+
+    Column {
+        id: col
+        x: 12 * root.s
+        y: 12 * root.s
+        width: root.width - 24 * root.s
+        spacing: 12 * root.s
+
+        // Header
+        Row {
+            spacing: 10 * root.s
+            AirPodsIcon {
+                anchors.verticalCenter: parent.verticalCenter
+                iconSize: 30 * root.s
+                variant: root.variant
+                color: root.pods && root.pods.hasAirPods ? Theme.accent : Theme.dim
+            }
+            Column {
+                anchors.verticalCenter: parent.verticalCenter
+                Text {
+                    text: root.pods && root.pods.modelName !== "" ? root.pods.modelName
+                        : root.pods && root.pods.deviceName !== "" ? root.pods.deviceName : "AirPods"
+                    color: Theme.bright
+                    font.family: Theme.display
+                    font.pixelSize: 16 * root.s
+                }
+                Text {
+                    text: root.subtitle
+                    color: Theme.dim
+                    font.family: Theme.font
+                    font.pixelSize: 12 * root.s
+                }
+            }
+        }
+
+        // Command failure / unreadable status
+        Text {
+            visible: root.pods && (root.pods.actionStatus !== "" || (root.pods.lastError !== "" && root.pods.daemonReachable))
+            width: parent.width
+            text: root.pods ? (root.pods.actionStatus !== "" ? root.pods.actionStatus : root.pods.lastError) : ""
+            color: Theme.sun
+            font.family: Theme.font
+            font.pixelSize: 12 * root.s
+            wrapMode: Text.WordWrap
+            textFormat: Text.PlainText
+        }
+
+        // Battery
+        Column {
+            visible: root.pods && root.pods.hasBattery
+            width: parent.width
+            spacing: 6 * root.s
+
+            Label { text: root.tr("BATTERY") }
+
+            PodRow {
+                visible: root.pods && root.pods.isHeadset
+                label: root.tr("Headphones")
+                pod: root.pods ? ({ level: root.pods.headsetBattery.level, charging: root.pods.headsetBattery.charging, inEar: false }) : null
+            }
+            PodRow { visible: root.pods && !root.pods.isHeadset; label: root.tr("Left"); pod: root.pods ? root.pods.leftPod : null }
+            PodRow { visible: root.pods && !root.pods.isHeadset; label: root.tr("Right"); pod: root.pods ? root.pods.rightPod : null }
+            PodRow {
+                visible: root.pods && !root.pods.isHeadset
+                label: root.tr("Case")
+                pod: root.pods ? ({ level: root.pods.caseBattery.level, charging: root.pods.caseBattery.charging, inEar: false }) : null
+                meta: !root.pods ? "" : root.pods.caseBattery.level < 0 ? root.tr("Case not heard") : root.mdl.lidText(root.pods.lidState)
+            }
+        }
+
+        // Listening mode
+        Column {
+            visible: root.pods && root.pods.hasAirPods && root.modes.length > 0
+            width: parent.width
+            spacing: 6 * root.s
+
+            Label { text: root.tr("LISTENING MODE") }
+
+            Repeater {
+                model: root.modes
+                Row {
+                    id: modeRow
+                    required property int modelData
+                    readonly property bool selected: root.pods.noiseMode === modelData
+                    width: parent.width
+                    height: 28 * root.s
+                    Rectangle {
+                        width: parent.width
+                        height: parent.height
+                        radius: Theme.radius
+                        color: modeArea.containsMouse ? Theme.tileBg : (modeRow.selected ? Theme.threadBg : "transparent")
+                        border.color: modeRow.selected ? Theme.accent : "transparent"
+                        border.width: 1
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: 10 * root.s
+                            text: root.mdl.noiseModeName(modeRow.modelData)
+                            color: modeRow.selected ? Theme.bright : Theme.dim
+                            font.family: Theme.font
+                            font.pixelSize: 13 * root.s
+                        }
+                        MouseArea {
+                            id: modeArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.pods.setNoiseMode(modeRow.modelData)
+                        }
+                    }
+                }
+            }
+
+            // Adaptive noise level, only while Adaptive is the active mode
+            Column {
+                visible: root.adaptiveVisible
+                width: parent.width
+                spacing: 4 * root.s
+                Row {
+                    width: parent.width
+                    Text {
+                        width: parent.width - pct.implicitWidth
+                        text: root.tr("Adaptive noise")
+                        color: Theme.dim
+                        font.family: Theme.font
+                        font.pixelSize: 12 * root.s
+                    }
+                    Text {
+                        id: pct
+                        text: root.pods ? root.pods.adaptiveNoiseLevel + "%" : ""
+                        color: Theme.bright
+                        font.family: Theme.font
+                        font.pixelSize: 12 * root.s
+                    }
+                }
+                Item {
+                    id: slider
+                    width: parent.width
+                    height: 18 * root.s
+                    property real fraction: dragging ? dragFraction : (root.pods ? root.pods.adaptiveNoiseLevel / 100 : 0)
+                    property bool dragging: false
+                    property real dragFraction: 0
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width
+                        height: 4 * root.s
+                        color: Theme.hair
+                        Rectangle {
+                            width: parent.width * slider.fraction
+                            height: parent.height
+                            color: Theme.accent
+                        }
+                    }
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: (parent.width - width) * slider.fraction
+                        width: 12 * root.s
+                        height: width
+                        radius: width / 2
+                        color: Theme.bright
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        function frac(mx) { return Math.max(0, Math.min(1, mx / width)); }
+                        onPressed: function (m) { slider.dragging = true; slider.dragFraction = frac(m.x); }
+                        onPositionChanged: function (m) { if (slider.dragging) slider.dragFraction = frac(m.x); }
+                        onReleased: function (m) {
+                            slider.dragging = false;
+                            var step = root.adaptiveStepPercent;
+                            root.pods.setAdaptiveNoiseLevel(Math.round(frac(m.x) * 100 / step) * step);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Toggles
+        Column {
+            visible: root.pods && root.pods.hasAirPods && (root.pods.supportsConversationalAwareness || root.pods.supportsOneBudANC)
+            width: parent.width
+            spacing: 6 * root.s
+            ToggleRow {
+                visible: root.pods && root.pods.supportsConversationalAwareness
+                label: root.tr("Conversation Awareness")
+                caption: root.tr("Lower the volume when you start talking")
+                checked: root.pods ? root.pods.conversationalAwareness : false
+                onToggled: root.pods.setConversationalAwareness(!root.pods.conversationalAwareness)
+            }
+            ToggleRow {
+                visible: root.pods && root.pods.supportsOneBudANC
+                label: root.tr("One-Bud ANC")
+                caption: root.tr("Keep noise cancellation on with one pod in")
+                checked: root.pods ? root.pods.oneBudANC : false
+                onToggled: root.pods.setOneBudANC(!root.pods.oneBudANC)
+            }
+        }
+
+        // Ear detection
+        Rectangle {
+            visible: root.pods && root.pods.hasAirPods
+            width: parent.width
+            height: 28 * root.s
+            radius: Theme.radius
+            color: earArea.containsMouse ? Theme.tileBg : "transparent"
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                x: 10 * root.s
+                text: root.tr("Ear detection")
+                color: Theme.bright
+                font.family: Theme.font
+                font.pixelSize: 13 * root.s
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: parent.right
+                anchors.rightMargin: 10 * root.s
+                text: root.pods ? root.mdl.earDetectionName(root.pods.earDetectionBehavior) : ""
+                color: Theme.dim
+                font.family: Theme.font
+                font.pixelSize: 12 * root.s
+            }
+            MouseArea {
+                id: earArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.pods.cycleEarDetection()
+            }
+        }
+
+        // Guidance when nothing is connected
+        Text {
+            visible: root.pods && !root.pods.hasAirPods && !root.pods.hasBattery && !root.pods.schemaUnsupported
+            width: parent.width
+            text: root.pods && root.pods.daemonReachable
+                ? root.tr("Open the case or connect your AirPods to see battery and listening controls.")
+                : root.tr("Start the librepods daemon (systemctl --user start librepods) to see battery and listening controls.")
+            color: Theme.dim
+            font.family: Theme.font
+            font.pixelSize: 13 * root.s
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+        }
+    }
+
+    component Label: Text {
+        color: Theme.dim
+        font.family: Theme.font
+        font.pixelSize: 11 * root.s
+        font.letterSpacing: 1.2
+    }
+
+    component PodRow: Item {
+        id: podRow
+        property string label: ""
+        property var pod: null
+        property string meta: ""
+        readonly property int level: pod ? pod.level : -1
+        readonly property bool low: level >= 0 && level <= root.lowBatteryPercent && pod && !pod.charging
+        readonly property string metaText: meta !== "" ? meta : (pod ? root.mdl.podMeta(pod) : "")
+
+        width: parent.width
+        height: 18 * root.s
+
+        RowLayout {
+            anchors.fill: parent
+            spacing: 8 * root.s
+            Text {
+                text: podRow.label
+                color: Theme.dim
+                font.family: Theme.font
+                font.pixelSize: 12 * root.s
+                Layout.preferredWidth: Math.max(44 * root.s, implicitWidth + 10 * root.s)
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                implicitHeight: 6 * root.s
+                radius: height / 2
+                color: Theme.hair
+                Rectangle {
+                    width: parent.width * (root.mdl ? root.mdl.levelFraction(podRow.level) : 0)
+                    height: parent.height
+                    radius: parent.radius
+                    color: podRow.low ? Theme.sun : Theme.accent
+                }
+            }
+            Text {
+                text: root.mdl ? root.mdl.levelText(podRow.level) : ""
+                color: Theme.bright
+                font.family: Theme.font
+                font.pixelSize: 12 * root.s
+                horizontalAlignment: Text.AlignRight
+                Layout.preferredWidth: 38 * root.s
+            }
+            Text {
+                text: podRow.metaText
+                color: Theme.dim
+                font.family: Theme.font
+                font.pixelSize: 11 * root.s
+                elide: Text.ElideRight
+                Layout.preferredWidth: 56 * root.s
+            }
+        }
+    }
+
+    component ToggleRow: Rectangle {
+        id: tr
+        property string label: ""
+        property string caption: ""
+        property bool checked: false
+        signal toggled()
+
+        width: parent.width
+        height: 40 * root.s
+        radius: Theme.radius
+        color: trArea.containsMouse ? Theme.tileBg : "transparent"
+
+        Column {
+            anchors.verticalCenter: parent.verticalCenter
+            x: 10 * root.s
+            width: parent.width - 70 * root.s
+            Text {
+                width: parent.width
+                text: tr.label
+                color: Theme.bright
+                font.family: Theme.font
+                font.pixelSize: 13 * root.s
+                elide: Text.ElideRight
+            }
+            Text {
+                width: parent.width
+                text: tr.caption
+                color: Theme.dim
+                font.family: Theme.font
+                font.pixelSize: 11 * root.s
+                elide: Text.ElideRight
+            }
+        }
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: parent.right
+            anchors.rightMargin: 10 * root.s
+            width: 34 * root.s
+            height: 18 * root.s
+            radius: height / 2
+            color: tr.checked ? Theme.accent : Theme.hair
+            Rectangle {
+                y: 2 * root.s
+                x: tr.checked ? parent.width - width - 2 * root.s : 2 * root.s
+                width: parent.height - 4 * root.s
+                height: width
+                radius: width / 2
+                color: Theme.bright
+                Behavior on x { NumberAnimation { duration: 120 } }
+            }
+        }
+        MouseArea {
+            id: trArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tr.toggled()
+        }
+    }
+}

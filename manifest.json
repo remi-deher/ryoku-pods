@@ -1,0 +1,65 @@
+{
+  "id": "ryoku-pods",
+  "name": "AirPods",
+  "version": "0.1.0",
+  "author": "Rémi DEHER <56632525+remi-deher@users.noreply.github.com>",
+  "description": "AirPods in the Ryoku bar: per-pod and case battery, listening mode, adaptive noise level, conversation awareness, one-bud ANC and ear detection.",
+  "license": "MIT",
+  "official": false,
+  "hosts": [
+    "topbarGlyph"
+  ],
+  "entryPoints": {
+    "main": "service/Main.qml",
+    "content": "content/Widget.qml",
+    "panel": "content/Panel.qml"
+  },
+  "panel": {
+    "width": 340
+  },
+  "files": [
+    "bin/ryopods-setup",
+    "bin/ryopods-remove",
+    "content/AirPodsIcon.qml",
+    "service/Model.js",
+    "tests/model.test.js"
+  ],
+  "capabilities": {
+    "densities": [
+      "glyph",
+      "compact"
+    ],
+    "privileged": [
+      "pkexec pacman -S --needed --noconfirm cmake ninja qt6-connectivity qt6-tools qt6-declarative pkgconf libpulse"
+    ]
+  },
+  "defaults": {
+    "host": "topbarGlyph",
+    "label": "AirPods"
+  },
+  "dependencies": {
+    "commands": [
+      "librepods-ctl"
+    ],
+    "packages": [
+      "cmake",
+      "ninja",
+      "qt6-connectivity",
+      "qt6-tools",
+      "qt6-declarative",
+      "pkgconf",
+      "libpulse"
+    ]
+  },
+  "metadata": {
+    "settings": [
+      {
+        "key": "hideWhenDisconnected",
+        "type": "toggle",
+        "label": "Hide the icon when no AirPods are connected",
+        "group": "AirPods",
+        "default": true
+      }
+    ]
+  }
+}
