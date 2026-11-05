@@ -78,12 +78,19 @@ Item {
         interval: 450
         onTriggered: root.tipShown = true
     }
+    // Closing is debounced so a brief loss of hover (the popup mapping, a pixel of jitter)
+    // cannot toggle the tooltip on and off.
+    Timer {
+        id: tipHide
+        interval: 120
+        onTriggered: root.tipShown = false
+    }
     property bool tipShown: false
     Connections {
         target: area
         function onContainsMouseChanged() {
-            if (area.containsMouse) tipDelay.restart();
-            else { tipDelay.stop(); root.tipShown = false; }
+            if (area.containsMouse) { tipHide.stop(); tipDelay.restart(); }
+            else { tipDelay.stop(); tipHide.restart(); }
         }
     }
 
@@ -92,13 +99,15 @@ Item {
         sourceComponent: PopupWindow {
             visible: true
             color: "transparent"
+            // Empty input region: the tooltip never takes the pointer, so it cannot steal
+            // the hover from the glyph and make itself close.
+            mask: Region { item: null }
             anchor {
                 item: root
                 edges: Edges.Bottom
                 gravity: Edges.Bottom
-                rect.y: root.height + 4 * root.s
                 rect.width: root.width
-                rect.height: 0
+                rect.height: root.height + 4 * root.s
             }
             implicitWidth: tipCol.implicitWidth + 20 * root.s
             implicitHeight: tipCol.implicitHeight + 16 * root.s
@@ -106,7 +115,7 @@ Item {
                 anchors.fill: parent
                 radius: Theme.radius
                 color: Theme.tileBg
-                border.color: Theme.hair
+                border.color: Theme.border
                 border.width: 1
                 Column {
                     id: tipCol
@@ -123,6 +132,7 @@ Item {
                             color: index === 0 ? Theme.bright : Theme.dim
                             font.family: Theme.font
                             font.pixelSize: 12 * root.s
+                            font.weight: index === 0 ? Font.DemiBold : Font.Normal
                         }
                     }
                 }

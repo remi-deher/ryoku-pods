@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import Ryoku.PluginKit
 import Ryoku.PluginKit.Singletons
 
 // The bar panel: battery per pod and case, listening mode, adaptive level,
@@ -90,7 +91,7 @@ Item {
             width: parent.width
             spacing: 6 * root.s
 
-            Label { text: root.tr("BATTERY") }
+            MicroLabel { s: root.s; label: root.tr("BATTERY") }
 
             PodRow {
                 visible: root.pods && root.pods.isHeadset
@@ -113,38 +114,36 @@ Item {
             width: parent.width
             spacing: 6 * root.s
 
-            Label { text: root.tr("LISTENING MODE") }
+            MicroLabel { s: root.s; label: root.tr("LISTENING MODE") }
 
             Repeater {
                 model: root.modes
-                Row {
+                Rectangle {
                     id: modeRow
                     required property int modelData
                     readonly property bool selected: root.pods.noiseMode === modelData
                     width: parent.width
                     height: 28 * root.s
-                    Rectangle {
-                        width: parent.width
-                        height: parent.height
-                        radius: Theme.radius
-                        color: modeArea.containsMouse ? Theme.tileBg : (modeRow.selected ? Theme.threadBg : "transparent")
-                        border.color: modeRow.selected ? Theme.accent : "transparent"
-                        border.width: 1
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            x: 10 * root.s
-                            text: root.mdl.noiseModeName(modeRow.modelData)
-                            color: modeRow.selected ? Theme.bright : Theme.dim
-                            font.family: Theme.font
-                            font.pixelSize: 13 * root.s
-                        }
-                        MouseArea {
-                            id: modeArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.pods.setNoiseMode(modeRow.modelData)
-                        }
+                    radius: Theme.radius
+                    color: modeArea.containsMouse ? Theme.sheen : (modeRow.selected ? Theme.threadBg : "transparent")
+                    border.color: modeRow.selected ? Theme.accent : Theme.border
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: 10 * root.s
+                        text: root.mdl.noiseModeName(modeRow.modelData)
+                        color: modeRow.selected ? Theme.bright : Theme.dim
+                        font.family: Theme.font
+                        font.pixelSize: 13 * root.s
+                        font.weight: modeRow.selected ? Font.DemiBold : Font.Normal
+                    }
+                    MouseArea {
+                        id: modeArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.pods.setNoiseMode(modeRow.modelData)
                     }
                 }
             }
@@ -174,27 +173,33 @@ Item {
                 Item {
                     id: slider
                     width: parent.width
-                    height: 18 * root.s
+                    height: 16 * root.s
                     property real fraction: dragging ? dragFraction : (root.pods ? root.pods.adaptiveNoiseLevel / 100 : 0)
                     property bool dragging: false
                     property real dragFraction: 0
                     Rectangle {
+                        id: thread
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width
-                        height: 4 * root.s
-                        color: Theme.hair
+                        height: 3 * root.s
+                        radius: height / 2
+                        color: Theme.threadBg
                         Rectangle {
                             width: parent.width * slider.fraction
                             height: parent.height
-                            color: Theme.accent
+                            radius: parent.radius
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: Theme.vermDim }
+                                GradientStop { position: 1.0; color: Theme.vermLit }
+                            }
                         }
                     }
                     Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
-                        x: (parent.width - width) * slider.fraction
-                        width: 12 * root.s
-                        height: width
-                        radius: width / 2
+                        x: Math.max(0, Math.min(parent.width - width, slider.fraction * parent.width - width / 2))
+                        width: 2.5 * root.s
+                        height: 11 * root.s
                         color: Theme.bright
                     }
                     property int lastSent: -1
@@ -259,7 +264,7 @@ Item {
             width: parent.width
             spacing: 6 * root.s
 
-            Label { text: root.tr("EAR DETECTION") }
+            MicroLabel { s: root.s; label: root.tr("EAR DETECTION") }
 
             Segmented {
                 width: parent.width
@@ -293,13 +298,6 @@ Item {
         }
     }
 
-    component Label: Text {
-        color: Theme.dim
-        font.family: Theme.font
-        font.pixelSize: 11 * root.s
-        font.letterSpacing: 1.2
-    }
-
     component PodRow: Item {
         id: podRow
         property string label: ""
@@ -310,7 +308,7 @@ Item {
         readonly property string metaText: meta !== "" ? meta : (pod ? root.mdl.podMeta(pod) : "")
 
         width: parent.width
-        height: 18 * root.s
+        height: 20 * root.s
 
         RowLayout {
             anchors.fill: parent
@@ -322,24 +320,19 @@ Item {
                 font.pixelSize: 12 * root.s
                 Layout.preferredWidth: Math.max(44 * root.s, implicitWidth + 10 * root.s)
             }
-            Rectangle {
+            WaveMeter {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
-                implicitHeight: 6 * root.s
-                radius: height / 2
-                color: Theme.hair
-                Rectangle {
-                    width: parent.width * (root.mdl ? root.mdl.levelFraction(podRow.level) : 0)
-                    height: parent.height
-                    radius: parent.radius
-                    color: podRow.low ? Theme.sun : Theme.accent
-                }
+                s: root.s
+                frac: root.mdl ? root.mdl.levelFraction(podRow.level) : 0
+                opacity: podRow.level < 0 ? 0.4 : 1
             }
             Text {
                 text: root.mdl ? root.mdl.levelText(podRow.level) : ""
-                color: Theme.bright
+                color: podRow.low ? Theme.sun : Theme.bright
                 font.family: Theme.font
                 font.pixelSize: 12 * root.s
+                font.weight: Font.DemiBold
                 horizontalAlignment: Text.AlignRight
                 Layout.preferredWidth: 38 * root.s
             }
@@ -364,7 +357,9 @@ Item {
         width: parent.width
         height: 40 * root.s
         radius: Theme.radius
-        color: trArea.containsMouse ? Theme.tileBg : "transparent"
+        color: trArea.containsMouse ? Theme.sheen : "transparent"
+        border.width: 1
+        border.color: Theme.border
 
         Column {
             anchors.verticalCenter: parent.verticalCenter
@@ -391,17 +386,19 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
             anchors.rightMargin: 10 * root.s
-            width: 34 * root.s
-            height: 18 * root.s
-            radius: height / 2
-            color: tr.checked ? Theme.accent : Theme.hair
+            width: 30 * root.s
+            height: 14 * root.s
+            radius: Theme.radius
+            color: tr.checked ? Theme.threadBg : "transparent"
+            border.width: 1
+            border.color: tr.checked ? Theme.accent : Theme.border
             Rectangle {
                 y: 2 * root.s
                 x: tr.checked ? parent.width - width - 2 * root.s : 2 * root.s
-                width: parent.height - 4 * root.s
-                height: width
-                radius: width / 2
-                color: Theme.bright
+                width: 10 * root.s
+                height: parent.height - 4 * root.s
+                radius: Theme.radius
+                color: tr.checked ? Theme.accent : Theme.dim
                 Behavior on x { NumberAnimation { duration: 120 } }
             }
         }
