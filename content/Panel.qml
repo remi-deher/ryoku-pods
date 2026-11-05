@@ -85,6 +85,18 @@ Item {
             textFormat: Text.PlainText
         }
 
+        // Connection, so the Bluetooth menu is not needed to bring the AirPods up or down.
+        ToggleRow {
+            visible: root.pods && root.pods.daemonReachable && !root.pods.schemaUnsupported
+            width: parent.width
+            label: root.tr("Connection")
+            caption: root.pods && root.pods.connectRequest === "connect" ? root.tr("Connecting…")
+                : root.pods && root.pods.connectRequest === "disconnect" ? root.tr("Disconnecting…")
+                : root.pods && root.pods.connected ? root.tr("Connected") : root.tr("Not connected")
+            checked: root.pods ? root.pods.connectionWanted : false
+            onToggled: root.pods.setConnected(!root.pods.connectionWanted)
+        }
+
         // Battery
         Column {
             visible: root.pods && root.pods.hasBattery

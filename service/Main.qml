@@ -38,8 +38,16 @@ Item {
   property var headsetBattery: ({ level: Model.LEVEL_UNKNOWN, charging: false })
   property string lastError: ""
   property string actionStatus: ""
+  // "connect" or "disconnect" from the click until the daemon agrees, so the switch moves at once
+  // without claiming a link (and its controls) that does not exist yet.
+  property string connectRequest: ""
+  readonly property bool connectionWanted: connectRequest === "connect" ? true
+    : connectRequest === "disconnect" ? false : connected
+  readonly property int connectHoldMs: 12000
 
   readonly property string ctlPath: "librepods-ctl"
+  // The daemon forgets the address when the pods drop, so connect goes through bluetoothctl.
+  readonly property string connectScript: Qt.resolvedUrl("../bin/ryopods-connect").toString().replace(/^file:\/\//, "")
   readonly property bool busy: commandProcess.running
   // The daemon publishes here on change, so there is nothing to poll.
   readonly property string statePath: (Quickshell.env("XDG_STATE_HOME")
@@ -144,6 +152,8 @@ Item {
 
     _checkLowBattery()
 
+    if ((connectRequest === "connect" && connected) || (connectRequest === "disconnect" && !connected)) _clearConnectRequest()
+
     noiseMode = _settle("noiseMode", status.noiseMode)
     adaptiveNoiseLevel = _settle("adaptiveNoiseLevel", status.adaptiveNoiseLevel)
     oneBudANC = _settle("oneBudANC", status.oneBudANC)
@@ -201,17 +211,26 @@ Item {
     settleTimer.stop()
   }
 
+  function _clearConnectRequest() {
+    connectRequest = ""
+    connectTimer.stop()
+  }
+
   function _send(verb, field, optimistic) {
     if (verb === "") return
-    _pendingField = field
-    _pendingValue = optimistic
-    root[field] = optimistic
-    settleTimer.restart()
+    // An empty field is a verb with no value to hold, such as connect and disconnect.
+    if (field !== "") {
+      _pendingField = field
+      _pendingValue = optimistic
+      root[field] = optimistic
+      settleTimer.restart()
+    }
     if (commandProcess.running) {
       _queued = { verb: verb, field: field, optimistic: optimistic }
       return
     }
-    commandProcess.command = [ctlPath, verb]
+    commandProcess.command = (verb === "connect" || verb === "disconnect")
+      ? [connectScript, verb] : [ctlPath, verb]
     commandProcess.running = true
   }
 
@@ -237,6 +256,14 @@ Item {
   function setAdaptiveNoiseLevel(level) {
     var clamped = Math.max(0, Math.min(100, Math.round(level)))
     _send("adaptive:" + clamped, "adaptiveNoiseLevel", clamped)
+  }
+
+  // Same as the Bluetooth menu: bluetoothctl connect or disconnect on the paired AirPods, through the daemon.
+  function setConnected(enabled) {
+    if (!daemonReachable) return
+    connectRequest = enabled ? "connect" : "disconnect"
+    connectTimer.restart()
+    _send(enabled ? "connect" : "disconnect", "", enabled)
   }
 
   function setConversationalAwareness(enabled) {
@@ -282,6 +309,16 @@ Item {
     onLoadFailed: root.stateGone()
   }
 
+  Timer {
+    // A link that never comes up must not leave the switch stuck on the wrong side.
+    id: connectTimer
+    interval: root.connectHoldMs
+    onTriggered: {
+      root.connectRequest = ""
+      root.refresh()
+    }
+  }
+
   Process {
     id: notifyProcess
     running: false
@@ -298,6 +335,7 @@ Item {
       if (exitCode !== 0) {
         // Clearing the hold also stops the timer that would have re-read, so do it here.
         root._clearPending()
+        root._clearConnectRequest()
         root.refresh()
         root._queued = null
         // Its own field with its own timer, or the next status read wipes it unread.

@@ -40,7 +40,8 @@ const gone = Model.podFrom({ available: false, level: 82, charging: true, in_ear
 check("unavailable pod reports no level", gone.level, Model.LEVEL_UNKNOWN)
 check("unavailable pod reports no charging", gone.charging, false)
 check("unavailable pod reports no in_ear", gone.inEar, false)
-check("unavailable pod shows no meta", Model.podMeta(gone), "")
+check("unavailable pod is labelled not heard", Model.podMeta(gone), "Not heard")
+check("known pod is not labelled not heard", Model.podMeta({ level: 80, charging: false, inEar: false }), "")
 
 // Every failure path returns the full default shape rather than throwing.
 const empty = Model.parseStatus("")
@@ -168,6 +169,13 @@ const ts = Model.defaultStatus()
 ts.modelName = "AirPods Pro 3"; ts.left = { level: 79, charging: false, inEar: false }; ts.right = { level: 100, charging: true, inEar: false }; ts.noiseMode = 1
 check("tooltip lines", Model.tooltipLines(ts), ["AirPods Pro 3", "Left  79%", "Right  100% ⚡", "Case  --", "Listening mode  Noise Cancellation"])
 check("ear short label", Model.earDetectionShort(2), "Never")
+
+// A case out of range comes through as available with level 0: it must read as not heard, not as 0%.
+const faraway = Model.parseStatus('{"case":{"available":true,"charging":false,"level":0},"left":{"available":true,"charging":false,"in_ear":false,"level":100},"right":{"available":true,"charging":false,"in_ear":false,"level":100},"schema_version":1}')
+check("far case level 0 is unknown", faraway.caseBattery.level, Model.LEVEL_UNKNOWN)
+check("far case does not touch the pods", faraway.left.level, 100)
+const charging0 = Model.parseStatus('{"case":{"available":true,"charging":true,"level":0},"schema_version":1}')
+check("charging case at 0 stays 0", charging0.caseBattery.level, 0)
 
 if (failures > 0) {
 

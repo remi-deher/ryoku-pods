@@ -7,7 +7,7 @@ Shows battery per pod and case, listening mode, adaptive noise level, Conversati
 ## What runs, reads, writes
 
 - **Reads** `$XDG_STATE_HOME/librepods/status.json` (watched, no polling).
-- **Runs** `librepods-ctl <verb>` (argv array, only when you change a setting) and `notify-send` (argv array, one desktop notification when a battery gets low, if enabled). Both declared in `dependencies.commands`.
+- **Runs** `librepods-ctl <verb>` (argv array, when you change a setting), `bin/ryopods-connect` (the Connection switch: finds the paired Apple device and runs `bluetoothctl connect` or `disconnect`) and `notify-send` (argv array, one desktop notification when a battery gets low, if enabled). Both declared in `dependencies.commands`.
 - **Writes** nothing itself. No network. One privileged action, only when you run `bin/ryopods-setup` by hand and build packages are missing: `pkexec pacman -S --needed --noconfirm cmake ninja qt6-connectivity qt6-tools qt6-declarative pkgconf libpulse` (polkit prompt).
 - `bin/ryopods-setup` and `bin/ryopods-remove` are optional helpers you run by hand. They build/install or remove the daemon in `~/.local` and `~/.config/systemd`-managed user units, and delete `~/.config/AirPodsTrayApp` and `~/.local/state/librepods` on removal (the validator flags these as outside-write warnings; that is intended).
 

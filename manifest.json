@@ -1,7 +1,7 @@
 {
   "id": "ryoku-pods",
   "name": "AirPods",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "status": "experimental",
   "author": "Rémi DEHER <56632525+remi-deher@users.noreply.github.com>",
   "description": "AirPods in the Ryoku bar: per-pod and case battery, listening mode, adaptive noise level, conversation awareness, one-bud ANC and ear detection.",
@@ -21,6 +21,7 @@
   "files": [
     "bin/ryopods-setup",
     "bin/ryopods-remove",
+    "bin/ryopods-connect",
     "content/AirPodsIcon.qml",
     "content/Segmented.qml",
     "service/Model.js",
@@ -42,6 +43,7 @@
   "dependencies": {
     "commands": [
       "librepods-ctl",
+      "bluetoothctl",
       "notify-send"
     ],
     "packages": [

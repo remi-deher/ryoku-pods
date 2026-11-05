@@ -1,0 +1,26 @@
+#!/bin/bash
+# Connects or disconnects the paired AirPods through bluetoothctl, like the Bluetooth menu.
+# Usage: ryopods-connect connect|disconnect
+# Why not `librepods-ctl connect`: the daemon forgets the address once the pods drop,
+# then logs "no current address" and still exits 0.
+set -euo pipefail
+
+action="${1:-}"
+case "$action" in connect | disconnect) ;; *) echo "usage: ryopods-connect connect|disconnect" >&2; exit 2 ;; esac
+
+# Apple's Bluetooth vendor id (0x004C) in the device's Modalias.
+found=""
+while read -r _ addr _; do
+  [ -n "$addr" ] || continue
+  info="$(bluetoothctl info "$addr" 2>/dev/null)" || continue
+  grep -q 'Modalias: bluetooth:v004C' <<<"$info" || continue
+  if [ "$action" = disconnect ] && ! grep -q 'Connected: yes' <<<"$info"; then continue; fi
+  found="$addr"
+  break
+done < <(bluetoothctl devices Paired)
+
+if [ -z "$found" ]; then
+  echo "no paired AirPods found" >&2
+  exit 1
+fi
+exec bluetoothctl "$action" "$found"

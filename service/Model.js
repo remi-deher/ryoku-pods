@@ -34,6 +34,10 @@ var FR = {
   "Open the case or connect your AirPods to see battery and listening controls.": "Ouvrez le boîtier ou connectez vos AirPods pour voir la batterie et les réglages d'écoute.",
   "Start the librepods daemon (systemctl --user start librepods) to see battery and listening controls.": "Lancez le démon librepods (systemctl --user start librepods) pour voir la batterie et les réglages d'écoute.",
   "Case not heard": "Boîtier non détecté",
+  "Not heard": "Non détecté",
+  "Connection": "Connexion",
+  "Connecting…": "Connexion…",
+  "Disconnecting…": "Déconnexion…",
   "The librepods status file is empty": "Le fichier d'état librepods est vide",
   "Could not read the librepods status file": "Impossible de lire le fichier d'état librepods",
   "One out": "Un retiré",
@@ -201,6 +205,9 @@ function parseStatus(raw) {
   status.left = podFrom(parsed.left)
   status.right = podFrom(parsed.right)
   var caseRaw = podFrom(parsed["case"])
+  // A case out of Bluetooth range is reported as available with level 0 (the daemon logs "Case: 0%" while the pods read 100%).
+  // A case that is really empty cannot be told apart, but it is not charging either, so 0 without charging means not heard.
+  if (caseRaw.level === 0 && !caseRaw.charging) caseRaw.level = LEVEL_UNKNOWN
   status.caseBattery = { level: caseRaw.level, charging: caseRaw.charging }
   var headsetRaw = podFrom(parsed.headset)
   status.headset = { level: headsetRaw.level, charging: headsetRaw.charging }
@@ -264,6 +271,8 @@ function lidText(lidState) {
 }
 
 function podMeta(pod) {
+  // No level means the daemon has stopped hearing this pod, whatever its other flags were.
+  if (pod.level === LEVEL_UNKNOWN) return t("Not heard")
   if (pod.charging) return t("Charging")
   if (pod.inEar) return t("In ear")
   return ""
