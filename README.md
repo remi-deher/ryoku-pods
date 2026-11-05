@@ -49,6 +49,10 @@ Hovering the glyph shows a tooltip with each battery and the listening mode.
 - Panel is built with `Ryoku.PluginKit` theme tokens instead of Omarchy's `qs.Ui` components; the rotating hero phrases were dropped.
 - `service/Model.js` and its test (`deno run --allow-read tests/model.test.js`) are unchanged.
 
+## Source of truth
+
+This repository is a read-only mirror, rewritten by CI from [remi-deher/linux-plugins](https://github.com/remi-deher/linux-plugins) (`linux/ryoku/ryoku-pods`). Open pull requests and commits there; anything pushed here directly is overwritten on the next sync. Issues can be filed here.
+
 ## Status
 
 Validated with `ryoku plugin validate` (0 blocking) and installed. **Not tested against real AirPods** and no `assets/preview-widget.png` yet (capture one on your bar).
