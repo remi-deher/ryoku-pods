@@ -1,7 +1,7 @@
 {
   "id": "ryoku-pods",
   "name": "AirPods",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Rémi DEHER <56632525+remi-deher@users.noreply.github.com>",
   "description": "AirPods in the Ryoku bar: per-pod and case battery, listening mode, adaptive noise level, conversation awareness, one-bud ANC and ear detection.",
   "license": "MIT",
